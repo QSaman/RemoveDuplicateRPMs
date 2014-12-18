@@ -6,6 +6,7 @@
 #include <QFile>
 #include <algorithm>
 #include <QCollator>
+#include <QStringList>
 
 Runner::Runner(QObject *parent) :
     QObject(parent)
@@ -16,6 +17,18 @@ Runner::Runner(const QString& dirPath, bool removeDuplicates) : qCout{stdout}
 {
     this->dirPath = dirPath;
     this->removeDuplicates = removeDuplicates;
+    connect(&process, SIGNAL(error(QProcess::ProcessError)), SLOT(errorInProcess(QProcess::ProcessError)));
+    connect(&process, SIGNAL(readyReadStandardOutput()), SLOT(readInput()));
+}
+
+void Runner::readInput()
+{
+    rpmName = process.readLine();
+}
+
+void Runner::errorInProcess(QProcess::ProcessError error)
+{
+    qDebug() << error;
 }
 
 void Runner::run()
@@ -43,30 +56,21 @@ QFileInfoList Runner::obtainFileList()
 {
     //return QDir(dirPath).entryInfoList(QDir::Files | QDir::NoDotAndDotDot, QDir::Name);
     QFileInfoList ret = QDir(dirPath).entryInfoList(QDir::Files | QDir::NoDotAndDotDot);
-    qDebug() << "obi";
     std::sort(ret.begin(), ret.end(), comperator);
     return ret;
 }
 
 QString Runner::extractRpmName(const QString& rpmFile)
 {
-    int cnt = 2;
-    int i;
-    int rightIndex = rpmFile.indexOf(".fc20.");
-    if (rightIndex == -1)
+    QStringList args;
+    args << "-qp" << "--qf" << "\"%{NAME}\"" << rpmFile;
+    process.start("rpm", args);
+    if (!process.waitForFinished())
     {
-        QString message = QString("cannot find fc20 in %1").arg(rpmFile);
+        QString message = QString("Error in obtaining package name of %1").arg(rpmFile);
         qFatal(message.toUtf8().constData());
     }
-    for (i = rightIndex - 1; i >= 0 && cnt > 0; --i)
-        if (rpmFile[i] == '-')
-            --cnt;
-    if (cnt != 0)
-    {
-        QString message = QString("%1 deosn't have two dash characters").arg(rpmFile);
-        qFatal(message.toUtf8().constData());
-    }
-    return rpmFile.mid(0, i + 1);
+    return rpmName;
 }
 
 QFileInfoList Runner::findDuplicates(const QFileInfoList& fileList)
@@ -75,10 +79,10 @@ QFileInfoList Runner::findDuplicates(const QFileInfoList& fileList)
     int i, j;
     for (i = 0; i < fileList.size(); i = j)
     {
-        QString name1 = extractRpmName(fileList[i].fileName());
+        QString name1 = extractRpmName(fileList[i].absoluteFilePath());
         for (j = i + 1; j < fileList.size(); ++j)
         {
-            QString name2 = extractRpmName(fileList[j].fileName());
+            QString name2 = extractRpmName(fileList[j].absoluteFilePath());
             if (name1 != name2)
                 break;
         }

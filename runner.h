@@ -5,6 +5,7 @@
 #include <QFileInfoList>
 #include <QString>
 #include <QTextStream>
+#include <QProcess>
 
 class Runner : public QObject
 {
@@ -17,6 +18,9 @@ signals:
 
 public slots:
     void run();
+private slots:
+    void errorInProcess(QProcess::ProcessError error);
+    void readInput();
 private:
     void myMain();
     QFileInfoList obtainFileList();
@@ -26,6 +30,8 @@ private:
 
     QString dirPath;
     QTextStream qCout;
+    QProcess process;
+    QString rpmName;
 
 };
 
